@@ -1,0 +1,23 @@
+
+
+{
+  "name": "babcock-campus-navigator",
+  "version": "1.0.0",
+  "description": "Babcock University Campus Navigation with Vehicle Availability",
+  "main": "Backend/server.js",
+  "scripts": {
+    "start": "node Backend/server.js",
+    "dev": "nodemon Backend/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["campus", "navigation", "babcock", "vehicle", "tracking"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
