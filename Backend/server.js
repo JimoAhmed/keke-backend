@@ -274,6 +274,17 @@ function calculateETA(distanceKm, speedKmh = 12) {
     return (distanceKm / speedKmh) * 60;
 }
 
+function getVehiclePoolMeta(vehicleId) {
+    const pool = kekePools.find(p => p.vehicleId === vehicleId && ['waiting', 'ready', 'in_progress'].includes(p.status));
+    if (!pool) return null;
+    return {
+        poolId: pool.id,
+        destinationName: pool.destination?.name || null,
+        destinationLat: pool.destination?.lat ?? null,
+        destinationLng: pool.destination?.lng ?? null
+    };
+}
+
 // ============================================
 // API ROUTES
 // ============================================
@@ -300,7 +311,17 @@ app.get('/api/mobile/config', (req, res) => {
     });
 });
 
-app.get('/api/vehicles', (req, res) => res.json(vehicles));
+app.get('/api/vehicles', (req, res) => {
+    res.json(vehicles.map(v => {
+        const poolMeta = getVehiclePoolMeta(v.id);
+        return {
+            ...v,
+            poolDestinationName: poolMeta?.destinationName || null,
+            poolDestinationLat: poolMeta?.destinationLat ?? null,
+            poolDestinationLng: poolMeta?.destinationLng ?? null
+        };
+    }));
+});
 
 app.get('/api/vehicles/available', (req, res) => {
     res.json(vehicles.filter(v => v.available === true && v.passengerCount < v.maxCapacity && !v.reservedForPool));
@@ -331,6 +352,9 @@ app.get('/api/vehicles/nearby', (req, res) => {
                 available: v.available,
                 reservedForPool: v.reservedForPool, // FIXED: always expose this field
                 poolId: v.poolId,
+                poolDestinationName: getVehiclePoolMeta(v.id)?.destinationName || null,
+                poolDestinationLat: getVehiclePoolMeta(v.id)?.destinationLat ?? null,
+                poolDestinationLng: getVehiclePoolMeta(v.id)?.destinationLng ?? null,
                 lastUpdate: v.lastUpdate
             };
         })
@@ -343,7 +367,13 @@ app.get('/api/vehicles/nearby', (req, res) => {
 app.get('/api/vehicles/:id', (req, res) => {
     const vehicle = vehicles.find(v => v.id == req.params.id);
     if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
-    res.json(vehicle);
+    const poolMeta = getVehiclePoolMeta(vehicle.id);
+    res.json({
+        ...vehicle,
+        poolDestinationName: poolMeta?.destinationName || null,
+        poolDestinationLat: poolMeta?.destinationLat ?? null,
+        poolDestinationLng: poolMeta?.destinationLng ?? null
+    });
 });
 
 app.post('/api/rides/calculate-eta', (req, res) => {
@@ -517,11 +547,12 @@ app.post('/api/kekepool/join', (req, res) => {
         if (vehicle.available === false && vehicle.reservedForPool !== true) {
             return res.status(400).json({ success:false, error:'Vehicle is already reserved for a solo ride' });
         }
-        if (vehicle.reservedForPool === true && vehicle.poolId) {
+        if (vehicle.reservedForPool === true) {
             return res.status(400).json({
                 success: false,
                 error: 'Vehicle is already assigned to an existing pool',
-                poolId: vehicle.poolId
+                poolId: vehicle.poolId || getVehiclePoolMeta(vehicle.id)?.poolId || null,
+                poolDestinationName: getVehiclePoolMeta(vehicle.id)?.destinationName || null
             });
         }
 
