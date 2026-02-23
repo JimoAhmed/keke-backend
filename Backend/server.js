@@ -1,4 +1,4 @@
-// backend/server.js - COMPLETE WITH MOBILE CONFIG ENDPOINT AND KEKE-POOL
+﻿// backend/server.js - COMPLETE WITH MOBILE CONFIG ENDPOINT AND KEKE-POOL
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -121,7 +121,7 @@ class KekePool {
             if (vIdx !== -1) {
                 vehicles[vIdx].reservedForPool = true;
                 vehicles[vIdx].poolId = this.id;
-                vehicles[vIdx].available = false; // Now fully locked — no more riders
+                vehicles[vIdx].available = false; // Now fully locked â€” no more riders
                 vehicles[vIdx].lastUpdate = new Date().toISOString();
             }
         }
@@ -407,8 +407,9 @@ app.post('/api/vehicles/:id/reserve', (req, res) => {
     if (vehicle.reservedForPool) return res.status(400).json({ error:'This tricycle is reserved for a Keke-Pool and cannot be booked solo', reservedForPool:true, poolId:vehicle.poolId });
     if (vehicle.passengerCount >= vehicle.maxCapacity) return res.status(400).json({ error:'Vehicle is full', passengerCount:vehicle.passengerCount, maxCapacity:vehicle.maxCapacity });
     if (!vehicle.available) return res.status(400).json({ error:'Vehicle is already reserved' });
-    vehicles[vIdx].passengerCount += 1;
-    if (vehicles[vIdx].passengerCount >= vehicles[vIdx].maxCapacity) vehicles[vIdx].available = false;
+    // Solo booking hard-locks this tricycle until release/complete-ride.
+    vehicles[vIdx].passengerCount = 1;
+    vehicles[vIdx].available = false;
     vehicles[vIdx].reservedAt = new Date().toISOString();
     vehicles[vIdx].reservedBy = userName || "Guest";
     vehicles[vIdx].lastUpdate = new Date().toISOString();
@@ -495,7 +496,7 @@ app.post('/api/kekepool/join', (req, res) => {
     const requestedDestinationLat = parseFloat(destinationLat);
     const requestedDestinationLng = parseFloat(destinationLng);
 
-    // FIXED: vehicleId is required — frontend must send which tricycle the pool is for
+    // FIXED: vehicleId is required â€” frontend must send which tricycle the pool is for
     if (!userName || !pickupLat || !pickupLng || !destinationName || !destinationLat || !destinationLng) {
         return res.status(400).json({
             success: false,
@@ -537,7 +538,7 @@ app.post('/api/kekepool/join', (req, res) => {
             });
         }
     } else {
-        // Create new pool — vehicleId required for new pools
+        // Create new pool â€” vehicleId required for new pools
         if (!vehicleId) {
             return res.status(400).json({ success:false, error:'vehicleId is required to create a new pool' });
         }
@@ -668,7 +669,7 @@ setInterval(() => {
         }
         return true;
     });
-    console.log(`🧹 Cleanup: ${beforeRes-rideReservations.length} expired reservations, ${beforePool-kekePools.length} abandoned pools`);
+    console.log(`ðŸ§¹ Cleanup: ${beforeRes-rideReservations.length} expired reservations, ${beforePool-kekePools.length} abandoned pools`);
 }, 300000);
 
 // Health check
@@ -683,16 +684,18 @@ app.get('/api/health', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log('\n🚀 ================================================');
-    console.log('🚀     BABCOCK CAMPUS NAVIGATOR BACKEND');
-    console.log('🚀 ================================================');
-    console.log(`📡 Local:   http://localhost:${PORT}`);
-    console.log(`📡 Network: http://${LOCAL_IP}:${PORT}`);
-    console.log(`\n🗺️  Key endpoints:`);
+    console.log('\nðŸš€ ================================================');
+    console.log('ðŸš€     BABCOCK CAMPUS NAVIGATOR BACKEND');
+    console.log('ðŸš€ ================================================');
+    console.log(`ðŸ“¡ Local:   http://localhost:${PORT}`);
+    console.log(`ðŸ“¡ Network: http://${LOCAL_IP}:${PORT}`);
+    console.log(`\nðŸ—ºï¸  Key endpoints:`);
     console.log(`   /api/vehicles/nearby?lat=6.89&lng=3.72&radius=2`);
     console.log(`   POST /api/kekepool/join  { userName, vehicleId, pickupLat, pickupLng, destinationName, destinationLat, destinationLng }`);
     console.log(`   /api/health`);
-    console.log('\n🚲 Vehicle Status:');
+    console.log('\nðŸš² Vehicle Status:');
     console.log(`   Total: ${vehicles.length} | Available: ${vehicles.filter(v=>v.available&&v.passengerCount<v.maxCapacity&&!v.reservedForPool).length}`);
-    console.log('🚀 ================================================\n');
+    console.log('ðŸš€ ================================================\n');
 });
+
+
