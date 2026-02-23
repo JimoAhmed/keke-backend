@@ -42,7 +42,7 @@ let vehicles = [
     { id:2, name:"Tricycle #002", type:"tricycle", lat:6.89509, lng:3.72761, available:true, battery:78, maxCapacity:4, passengerCount:0, color:"Red", lastUpdate:new Date().toISOString(), driver:"Michael Obi", phone:"+234 803 234 5678", speed:12, rating:4.6, tripsToday:8, reservedForPool:false, poolId:null },
     { id:3, name:"Tricycle #003", type:"tricycle", lat:6.89286, lng:3.72351, available:true, battery:65, maxCapacity:4, passengerCount:0, color:"Green", lastUpdate:new Date().toISOString(), driver:"Sunday Eze", phone:"+234 803 345 6789", speed:10, rating:4.9, tripsToday:15, reservedForPool:false, poolId:null },
     { id:4, name:"Tricycle #004", type:"tricycle", lat:6.88884, lng:3.72281, available:true, battery:85, maxCapacity:4, passengerCount:0, color:"Yellow", lastUpdate:new Date().toISOString(), driver:"Chidi Nwosu", phone:"+234 803 456 7890", speed:14, rating:4.7, tripsToday:10, reservedForPool:false, poolId:null },
-    { id:5, name:"Tricycle #005", type:"tricycle", lat:6.89069, lng:3.72622, available:true, battery:45, maxCapacity:4, passengerCount:0, color:"Blue", lastUpdate:new Date().toISOString(), driver:"Emeka Okonkwo", phone:"+234 803 567 8901", speed:11, rating:4.5, tripsToday:6, reservedForPool:false, poolId:null },
+    { id:5, name:"Tricycle #005", type:"tricycle", lat:6.89069, lng:3.72622, available:true, battery:70, maxCapacity:4, passengerCount:0, color:"Blue", lastUpdate:new Date().toISOString(), driver:"Emeka Okonkwo", phone:"+234 803 567 8901", speed:11, rating:4.5, tripsToday:6, reservedForPool:false, poolId:null },
     { id:6, name:"Tricycle #006", type:"tricycle", lat:6.89471, lng:3.72230, available:true, battery:88, maxCapacity:4, passengerCount:0, color:"Red", lastUpdate:new Date().toISOString(), driver:"Ifeanyi Ade", phone:"+234 803 678 9012", speed:13, rating:4.8, tripsToday:14, reservedForPool:false, poolId:null }
 ];
 
@@ -461,6 +461,9 @@ app.get('/api/kekepool/status', (req, res) => {
 // FIXED: Accept frontend riderId, require vehicleId, lock vehicle immediately
 app.post('/api/kekepool/join', (req, res) => {
     const { poolId, riderId, userName, pickupLat, pickupLng, destinationName, destinationLat, destinationLng, vehicleId } = req.body;
+    const requestedDestinationName = String(destinationName || '').trim().toLowerCase();
+    const requestedDestinationLat = parseFloat(destinationLat);
+    const requestedDestinationLng = parseFloat(destinationLng);
 
     // FIXED: vehicleId is required — frontend must send which tricycle the pool is for
     if (!userName || !pickupLat || !pickupLng || !destinationName || !destinationLat || !destinationLng) {
@@ -478,6 +481,31 @@ app.post('/api/kekepool/join', (req, res) => {
         pool = kekePools.find(p => p.id === poolId);
         if (!pool) return res.status(404).json({ success:false, error:'Pool not found' });
         if (pool.status !== 'waiting') return res.status(400).json({ success:false, error:'Pool is no longer accepting riders' });
+
+        // STRICT: riders can only join pools with the exact same destination.
+        const poolDestinationName = String(pool.destination?.name || '').trim().toLowerCase();
+        const poolDestinationLat = parseFloat(pool.destination?.lat);
+        const poolDestinationLng = parseFloat(pool.destination?.lng);
+        const destinationDistance = calculateDistance(
+            requestedDestinationLat, requestedDestinationLng,
+            poolDestinationLat, poolDestinationLng
+        );
+        if (requestedDestinationName !== poolDestinationName || Number.isNaN(destinationDistance) || destinationDistance > 0.05) {
+            return res.status(400).json({
+                success: false,
+                error: 'Destination does not match this pool destination',
+                poolDestination: pool.destination
+            });
+        }
+
+        // STRICT: if vehicleId is supplied, it must match the pool vehicle.
+        if (vehicleId && parseInt(vehicleId) !== pool.vehicleId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Vehicle does not match this pool vehicle',
+                poolVehicleId: pool.vehicleId
+            });
+        }
     } else {
         // Create new pool — vehicleId required for new pools
         if (!vehicleId) {
@@ -486,6 +514,16 @@ app.post('/api/kekepool/join', (req, res) => {
         const vehicle = vehicles.find(v => v.id == vehicleId);
         if (!vehicle) return res.status(404).json({ success:false, error:'Vehicle not found' });
         if (vehicle.passengerCount >= vehicle.maxCapacity) return res.status(400).json({ success:false, error:'Vehicle is full' });
+        if (vehicle.available === false && vehicle.reservedForPool !== true) {
+            return res.status(400).json({ success:false, error:'Vehicle is already reserved for a solo ride' });
+        }
+        if (vehicle.reservedForPool === true && vehicle.poolId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Vehicle is already assigned to an existing pool',
+                poolId: vehicle.poolId
+            });
+        }
 
         pool = new KekePool(destinationName, parseFloat(destinationLat), parseFloat(destinationLng), parseInt(vehicleId));
         kekePools.push(pool);
