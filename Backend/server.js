@@ -336,7 +336,7 @@ app.get('/api/vehicles', (req, res) => {
 });
 
 app.get('/api/vehicles/available', (req, res) => {
-    res.json(vehicles.filter(v => v.available === true && v.passengerCount < v.maxCapacity && !v.reservedForPool));
+    res.json(vehicles.filter(v => v.available === true && v.passengerCount < v.maxCapacity && !v.reservedForPool && !v.poolId));
 });
 
 // FIXED: nearby now includes reservedForPool in response so frontend can show "Pool Only" badge
@@ -394,7 +394,7 @@ app.post('/api/rides/calculate-eta', (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters' });
     const vehicle = vehicles.find(v => v.id == vehicleId);
     if (!vehicle) return res.status(404).json({ error: 'Vehicle not found' });
-    if (vehicle.reservedForPool) return res.status(400).json({ error:'This tricycle is reserved for a Keke-Pool and cannot be booked solo', reservedForPool:true, poolId:vehicle.poolId });
+    if (vehicle.reservedForPool || vehicle.poolId) return res.status(400).json({ error:'This tricycle is reserved for a Keke-Pool and cannot be booked solo', reservedForPool:true, poolId:vehicle.poolId });
     if (vehicle.passengerCount >= vehicle.maxCapacity) return res.status(400).json({ error:'Vehicle is full', passengerCount:vehicle.passengerCount, maxCapacity:vehicle.maxCapacity });
     const pickupDistance = calculateDistance(parseFloat(pickupLat), parseFloat(pickupLng), vehicle.lat, vehicle.lng);
     const tripDistance = calculateDistance(parseFloat(pickupLat), parseFloat(pickupLng), parseFloat(destLat), parseFloat(destLng));
@@ -416,7 +416,7 @@ app.post('/api/vehicles/:id/reserve', (req, res) => {
     const vIdx = vehicles.findIndex(v => v.id == id);
     if (vIdx === -1) return res.status(404).json({ error:'Vehicle not found' });
     const vehicle = vehicles[vIdx];
-    if (vehicle.reservedForPool) return res.status(400).json({ error:'This tricycle is reserved for a Keke-Pool and cannot be booked solo', reservedForPool:true, poolId:vehicle.poolId });
+    if (vehicle.reservedForPool || vehicle.poolId) return res.status(400).json({ error:'This tricycle is reserved for a Keke-Pool and cannot be booked solo', reservedForPool:true, poolId:vehicle.poolId });
     if (vehicle.passengerCount >= vehicle.maxCapacity) return res.status(400).json({ error:'Vehicle is full', passengerCount:vehicle.passengerCount, maxCapacity:vehicle.maxCapacity });
     if (!vehicle.available) return res.status(400).json({ error:'Vehicle is already reserved' });
     // Solo booking hard-locks this tricycle until release/complete-ride.
