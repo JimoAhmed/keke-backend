@@ -65,6 +65,7 @@ class KekePool {
         this.assignedVehicle = null;
         this.optimizedRoute = null;
         this.syncState = null;
+        this.progress = null;
         this.vehicleId = vehicleId;
 
         // FIXED: Lock the vehicle for pool mode as soon as the pool is created
@@ -117,6 +118,7 @@ class KekePool {
         if (this.assignedVehicle) {
             this.calculateOptimizedRoute();
             this.buildSynchronizedPlan();
+            this.initializeProgress();
             const vIdx = vehicles.findIndex(v => v.id === this.vehicleId);
             if (vIdx !== -1) {
                 vehicles[vIdx].reservedForPool = true;
@@ -254,6 +256,16 @@ class KekePool {
             totalTimeMinutes,
             estimatedArrivalAt: new Date(rideStartMs + totalTimeMinutes * 60000).toISOString(),
             pickupPlan
+        };
+    }
+
+    initializeProgress() {
+        const rideStartAt = this.syncState?.rideStartAt || new Date(Date.now() + 2000).toISOString();
+        this.progress = {
+            currentPickupIndex: 0,
+            phase: 'pickup',
+            legStartedAt: rideStartAt,
+            updatedAt: new Date().toISOString()
         };
     }
 }
@@ -611,8 +623,41 @@ app.get('/api/kekepool/:poolId', (req, res) => {
         vehicleId:pool.vehicleId,
         assignedVehicle: pool.assignedVehicle ? { id:pool.assignedVehicle.id, name:pool.assignedVehicle.name, driver:pool.assignedVehicle.driver, phone:pool.assignedVehicle.phone, lat:pool.assignedVehicle.lat, lng:pool.assignedVehicle.lng, speed:pool.assignedVehicle.speed } : null,
         optimizedRoute:pool.optimizedRoute,
-        syncState: pool.syncState
+        syncState: pool.syncState,
+        progress: pool.progress
     });
+});
+
+app.get('/api/kekepool/:poolId/progress', (req, res) => {
+    const pool = kekePools.find(p => p.id === req.params.poolId);
+    if (!pool) return res.status(404).json({ error:'Pool not found' });
+    if (!pool.progress && pool.syncState) pool.initializeProgress();
+    res.json({
+        serverTime: new Date().toISOString(),
+        poolId: pool.id,
+        progress: pool.progress || null,
+        syncState: pool.syncState || null
+    });
+});
+
+app.post('/api/kekepool/:poolId/progress', (req, res) => {
+    const pool = kekePools.find(p => p.id === req.params.poolId);
+    if (!pool) return res.status(404).json({ error:'Pool not found' });
+    const { riderId, currentPickupIndex, legStartedAt, phase } = req.body || {};
+    if (!riderId) return res.status(400).json({ error:'Missing riderId' });
+    const isMember = pool.riders.some(r => r.id === riderId);
+    if (!isMember) return res.status(403).json({ error:'Rider not in this pool' });
+    if (!pool.progress && pool.syncState) pool.initializeProgress();
+    const idx = Number.isFinite(currentPickupIndex) ? currentPickupIndex : pool.progress?.currentPickupIndex || 0;
+    const nextIdx = Math.max(pool.progress?.currentPickupIndex || 0, idx);
+    pool.progress = {
+        currentPickupIndex: nextIdx,
+        phase: phase || pool.progress?.phase || 'pickup',
+        legStartedAt: legStartedAt || pool.progress?.legStartedAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+    pool.status = pool.progress.phase === 'to_destination' ? 'in_progress' : pool.status;
+    res.json({ success:true, progress: pool.progress, serverTime: new Date().toISOString() });
 });
 
 app.post('/api/kekepool/:poolId/leave', (req, res) => {
